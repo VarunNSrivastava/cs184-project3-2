@@ -1,0 +1,221 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+    <link rel="stylesheet" type="text/css" href="style.css">
+
+    <title>Varun Neal Srivastava | CS 184</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async
+            src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+    </script>
+
+</head>
+<body>
+<br />
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2023</h1>
+<h1 align="middle">Project 3-2: Ray Tracing II</h1>
+<h2 align="middle">Varun Neal Srivastava</h2>
+ <h2 align="middle">Website URL: <a href="https://varunnsrivastava.github.io/cs184-project3-2/.">https://varunnsrivastava.github.io/cs184-project3-2/.</a></h2>
+
+    <div class="padded">
+
+        <div align="middle">
+            <table style="width:100%">
+                <tr align="center">
+                    <td>
+                        <img src="images/bunny_cu.png" align="middle" width="600px"/>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <h2 align="middle">Overview</h2>
+        <p>
+            This project is a brief extension of our previous ray tracing project, which can be found <a href="https://varunnsrivastava.github.io/cs184-project3/">here.</a>
+            This extension allows our engine to simulate new textures via the implementation of their <a href="https://en.wikipedia.org/wiki/Bidirectional_scattering_distribution_function">BSDFs.</a>
+            In particular, the engine now supports mirror and glass surfaces, as well as "isotropic rough conductors", e.g. most metals.
+        </p>
+        <br>
+
+
+        <h2 align="middle">Part 1. Mirror and Glass Materials</h2>
+        <p>(Perfect) mirrors only have specular reflectance: they reflect each light ray exactly across the normal vector. This is a very
+        basic, deterministic BSDF, and is easy to implement given our existing framework. Glass, in contrast, refracts light rays
+        (according to the index of refraction of the glass material). In the case where there is total internal reflection,
+        which occurs when the angle the ray intersects the glass is sufficiently high, the light ray is reflected rather than
+        refracted.
+            We can easily model refraction via <a href="https://en.wikipedia.org/wiki/Snell%27s_law">Snell's Law.</a>
+
+        </p>
+        <br>
+        <div align="middle">
+
+        <img src="images/spheres_1024_100.png" align="middle" width="600px"/>
+        <figcaption>Mirror (left) and glass (right) spheres</figcaption>
+        </div>
+
+        <p>In order to achieve the advanced lighting effects such as the reflected brightness on the walls
+        from the spheres, we need to simulate many bounces per ray of light. Deeper recursions of ray
+        traversal correspond to more advanced lighting effects:</p>
+
+        <!-- Example of including multiple figures -->
+        <div align="middle">
+            <table style="width:100%">
+                <tr align="center">
+                    <td>
+                        <img src="images/spheres_0.png" align="middle" width="400px"/>
+                        <figcaption>Depth = 0; no illumination.</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/spheres_1.png" align="middle" width="400px"/>
+                        <figcaption>Depth = 1; no reflection or refraction yet, so the spheres are invisible.</figcaption>
+                    </td>
+
+                </tr>
+                <tr align="center">
+                    <td>
+                        <img src="images/spheres_2.png" align="middle" width="400px"/>
+                        <figcaption>Depth = 2; reflection and refraction of the environment appear.</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/spheres_3.png" align="middle" width="400px"/>
+                        <figcaption>Depth = 3; notice the illumination of the shadow beneath the glass sphere.</figcaption>
+                    </td>
+                </tr>
+
+                <tr align="center">
+
+                    <td>
+                        <img src="images/spheres_4.png" align="middle" width="400px"/>
+                        <figcaption>Depth = 4; the illumination of the walls from spheres re-appears on the spheres.</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/spheres_5.png" align="middle" width="400px"/>
+                        <figcaption>Depth = 5; deeper recursion creates a brighter image.</figcaption>
+                    </td>
+                </tr>
+                <tr align="center">
+                    <td>
+                        <img src="images/spheres_100.png" align="middle" width="400px"/>
+                        <figcaption>Depth = 100; all multibounce effects have stabilized and converged.</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <p>
+            As we increase the depth of recursion, multiple bounces first create basic environmental reflection and refraction,
+            and later create complex self-similar reflection and shadow patterns. For example, the mirror ball reflects the glass ball,
+            in which the mirror ball's glimmer can be seen in the reflected glass ball. By the time we get to a depth of 4,
+            most obvious multibounce effects appear to converge. The image continues to get brighter as we increase the recursion depth
+            as the global illumination steadily increases.
+        </p>
+
+        <h2 align="middle">Part 2. Microfacet Materials</h2>
+        <p>
+            Isotropic rough conductors are imperfect mirrors. Essentially, each microfacet reflects light rays specularly,
+            but the normals of the surface are given according to a rough Normal Distribution Function. Surfaces have a roughness
+            coefficient as well as a distribution of refraction indices and extinction coefficients. The latter coefficients
+            determine the Fresnel coefficient, which essentially tells us how to recolor the light ray after a bounce.
+        </p>
+
+        <h3>
+            Varying the roughness coefficient \(\alpha\):
+        </h3>
+
+        <div align="middle">
+            <table style="width:100%">
+                <tr align="center">
+                    <td>
+                        <img src="images/dragon_au_0_5.png" align="middle" width="400px"/>
+                        <figcaption>\(\alpha = 0.5\)</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/dragon_au_0_25.png" align="middle" width="400px"/>
+                        <figcaption>\(\alpha = 0.25\)</figcaption>
+                    </td>
+                </tr>
+                <tr align="center">
+                    <td>
+                        <img src="images/dragon_au_0_05.png" align="middle" width="400px"/>
+                        <figcaption>\(\alpha = 0.05\)</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/dragon_au_0_005.png" align="middle" width="400px"/>
+                        <figcaption>\(\alpha = 0.005\)</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <br>
+
+        <p>Decreasing \(\alpha\) makes the surface appear "smoother". This can be considered somewhat akin to sanding
+        or filing the surface. Smoother surfaces look more similar to a mirror than a diffuse texture; e.g. at \(\alpha = 0.5\),
+        the gold dragon appears to be almost diffuse, whereas at \(\alpha = 0.005\), it appears to almost be a perfect mirror.</p>
+
+
+        <br>
+        It is difficult to implement importance sampling when all the normals are scattered according to the Normal Distribution
+        Function. The implementation essentially requires us to sample from the Beckman NDF. The equations we use and their
+        derivations can be found on <a href="https://agraphicsguy.wordpress.com/2015/11/01/sampling-microfacet-brdf/">this website.</a>
+
+        Importance sampling of course gives much faster convergence.
+
+        <h3>
+            Importance sampling vs (naive) uniform sampling at the same number of samples per pixel:
+        </h3>
+
+        <div align="middle">
+            <table style="width:100%">
+                <tr align="center">
+                    <td>
+                        <img src="images/bunny_cu_hemisphere.png" align="middle" width="400px"/>
+                        <figcaption>Uniform (hemisphere) sampling</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/bunny_cu_importance.png" align="middle" width="400px"/>
+                        <figcaption>Importance sampling</figcaption>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <br>
+        <p>It is obviously clear that importance sampling converges much more quickly. There is less noise and we have a
+        better understanding of the texture of the bunny at the same number of rays cast with importance sampling.</p>
+
+        <p>
+            In order to model an arbitrary isotropic rough conductor, we only need to know its refraction index and extinction
+            coefficients along the visible light spectrum. For example, <a href="https://refractiveindex.info/">this website</a> has a collection
+            of these coefficients for many materials. Instead of integrating over the entire visible light spectrum, we simply take note
+            of the coefficients at red (614nm), green (549 nm), and blue (466nm) wavelengths of the spectrum. From there, we can
+            can approximate the Fresnel coefficient using the RGB values of the light ray.
+        </p>
+        <p>The refraction index of iron at those wavelengths turns out to be 1.5454, 1.2216, and 1.0355, respectively. The extinction coefficients are
+            6.9982, 5.9220, and 4.6354, respectively. Thus, with those values, we can model an iron texture:
+        </p>
+
+        <div align="middle">
+            <table style="width:100%">
+                <tr align="center">
+                    <td>
+                        <img src="images/dragon_iron_025.png" align="middle" width="600px"/>
+                        <figcaption>An iron dragon with \(\alpha  = 0.25\).</figcaption>
+
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+    </div>
+</body>
+</html>
+
